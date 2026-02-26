@@ -1,0 +1,170 @@
+name: Manual Sync Upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      sync_mode:
+        description: '同步模式'
+        required: true
+        default: 'merge'
+        type: choice
+        options:
+          - merge
+          - reset
+      backup_database:
+        description: '更新前备份数据库'
+        required: true
+        default: true
+        type: boolean
+      deploy_after_sync:
+        description: '同步后自动部署'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  sync:
+    name: Sync with Upstream
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_VERSION: "4.54.0"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/qaz741wsd856/warden-worker.git || true
+          git fetch upstream
+
+      - name: Check for updates
+        id: check
+        run: |
+          LOCAL=$(git rev-parse main)
+          REMOTE=$(git rev-parse upstream/main)
+          
+          if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "✅ 已经是最新版本，无需更新"
+          else
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "📝 发现上游更新"
+            echo ""
+            echo "即将合并的更新:"
+            git log --oneline main..upstream/main | head -20
+          fi
+
+      - name: Backup database (optional)
+        if: inputs.backup_database && steps.check.outputs.has_updates == 'true'
+        run: |
+          echo "💾 正在备份数据库..."
+          BACKUP_FILE="backup-$(date +%Y%m%d-%H%M%S).sql"
+          
+          # 安装 wrangler
+          npm install -g wrangler@${WRANGLER_VERSION}
+          
+          # 导出数据库
+          if wrangler d1 export vault1 --remote --output="$BACKUP_FILE"; then
+            echo "✅ 数据库已备份: $BACKUP_FILE"
+            
+            # 上传备份作为 artifact
+            mkdir -p backups
+            cp "$BACKUP_FILE" backups/
+          else
+            echo "⚠️ 数据库备份失败，继续更新..."
+          fi
+
+      - name: Sync upstream (merge mode)
+        if: inputs.sync_mode == 'merge' && steps.check.outputs.has_updates == 'true'
+        run: |
+          echo "🔄 使用合并模式同步..."
+          git checkout main
+          
+          # 保存本地更改（如果有）
+          if ! git diff --quiet; then
+            echo "💾 保存本地更改..."
+            git stash push -m "auto-stash-$(date +%Y%m%d)"
+          fi
+          
+          # 合并上游更新
+          if git merge upstream/main --no-edit; then
+            echo "✅ 合并成功"
+          else
+            echo "❌ 合并冲突，尝试自动解决..."
+            
+            # 优先使用上游版本解决冲突
+            git checkout --theirs .
+            git add .
+            git commit -m "Merge upstream and resolve conflicts (auto)"
+            
+            echo "⚠️ 注意：自动解决了冲突，建议检查后确认"
+          fi
+
+      - name: Sync upstream (reset mode)
+        if: inputs.sync_mode == 'reset' && steps.check.outputs.has_updates == 'true'
+        run: |
+          echo "🔄 使用重置模式同步..."
+          echo "⚠️ 警告：这将丢弃所有本地更改！"
+          
+          git checkout main
+          git reset --hard upstream/main
+          
+          echo "✅ 已重置到上游最新版本"
+
+      - name: Push to origin
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          echo "🚀 推送到 origin..."
+          git push origin main --force
+          echo "✅ 推送成功"
+
+      - name: Upload backup artifact
+        if: inputs.backup_database && steps.check.outputs.has_updates == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-backup-${{ github.run_id }}
+          path: backups/*.sql
+          retention-days: 30
+
+      - name: Trigger deployment
+        if: inputs.deploy_after_sync && steps.check.outputs.has_updates == 'true'
+        run: |
+          echo "✅ 代码已推送，Build workflow 将自动触发部署"
+          echo ""
+          echo "查看部署进度:"
+          echo "https://github.com/${{ github.repository }}/actions"
+
+      - name: Summary
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          echo ""
+          echo "============================================"
+          echo "  同步完成！"
+          echo "============================================"
+          echo ""
+          echo "📊 更新内容:"
+          git log --oneline -10
+          echo ""
+          echo "🌐 你的服务: https://pw.pxlx.xyz"
+          echo "📈 部署状态: https://github.com/${{ github.repository }}/actions"
+
+      - name: No updates
+        if: steps.check.outputs.has_updates == 'false'
+        run: |
+          echo ""
+          echo "============================================"
+          echo "  无需更新"
+          echo "============================================"
+          echo ""
+          echo "你的仓库已经是最新版本。"

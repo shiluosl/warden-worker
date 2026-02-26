@@ -1,0 +1,12 @@
+/target
+node_modules/
+.wrangler/
+.env
+.env.local
+public/web-vault/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
