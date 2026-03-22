@@ -102,6 +102,22 @@ jobs:
       - name: Replace D1_DATABASE_ID in wrangler.toml
         run: sed -i "s/\${D1_DATABASE_ID}/${{ secrets.D1_DATABASE_ID }}/g" wrangler.toml
 
+      - name: Enable KV binding when ATTACHMENTS_KV_ID is provided
+        env:
+          ATTACHMENTS_KV_ID: ${{ secrets.ATTACHMENTS_KV_ID }}
+        run: |
+          if [ -n "$ATTACHMENTS_KV_ID" ]; then
+            echo "🔧 Enabling KV namespace binding"
+            {
+              echo ''
+              echo '[[kv_namespaces]]'
+              echo 'binding = "ATTACHMENTS_KV"'
+              echo "id = \"${ATTACHMENTS_KV_ID}\""
+            } >> wrangler.toml
+          else
+            echo "⏭️ ATTACHMENTS_KV_ID not set, attachments remain disabled unless R2 is configured"
+          fi
+
       - name: Enable R2 binding when R2_NAME is provided
         env:
           R2_NAME: ${{ secrets.R2_NAME }}
@@ -117,6 +133,27 @@ jobs:
           else
             echo "⏭️ R2_NAME not set, skipping R2 binding"
           fi
+
+      - name: Sync production Worker secrets from GitHub Actions
+        env:
+          ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+        run: |
+          set -euo pipefail
+          WRANGLER="npx --yes wrangler@${WRANGLER_VERSION}"
+
+          for secret_name in ALLOWED_EMAILS JWT_SECRET JWT_REFRESH_SECRET; do
+            if [ -z "${!secret_name:-}" ]; then
+              echo "❌ Missing required GitHub Actions secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+
+          SECRETS_JSON="$(mktemp)"
+          python -c 'import json, os, sys; json.dump({"ALLOWED_EMAILS": os.environ["ALLOWED_EMAILS"], "JWT_SECRET": os.environ["JWT_SECRET"], "JWT_REFRESH_SECRET": os.environ["JWT_REFRESH_SECRET"]}, sys.stdout)' > "$SECRETS_JSON"
+          $WRANGLER secret bulk "$SECRETS_JSON"
+          rm -f "$SECRETS_JSON"
 
       - name: Bootstrap D1 schema when database is empty
         run: |
@@ -151,12 +188,12 @@ jobs:
             echo "📝 Marking existing migrations as applied (schema.sql already includes them)"
             BOOTSTRAP_SQL="$(mktemp)"
             cat >"${BOOTSTRAP_SQL}" <<'SQL'
-          CREATE TABLE IF NOT EXISTS d1_migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-          );
-          SQL
+            CREATE TABLE IF NOT EXISTS d1_migrations (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT UNIQUE NOT NULL,
+              applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            );
+            SQL
             shopt -s nullglob
             for f in migrations/*.sql; do
               echo "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$(basename "${f}")');" >>"${BOOTSTRAP_SQL}"

@@ -7,7 +7,7 @@ use worker::Env;
 
 use crate::handlers::{
     accounts, attachments, ciphers, config, devices, domains, emergency_access, folders, identity,
-    import, meta, sync, twofactor, webauth,
+    import, meta, sends, sync, twofactor, webauth,
 };
 
 pub fn api_router(env: Env) -> Router {
@@ -28,6 +28,16 @@ pub fn api_router(env: Env) -> Router {
         )
         // Main data sync route
         .route("/api/sync", get(sync::get_sync_data))
+        .route("/api/sends", get(sends::get_sends))
+        .route("/api/sends", post(sends::create_send))
+        .route("/api/sends/access/{access_id}", post(sends::access_send))
+        .route("/api/sends/{id}", get(sends::get_send))
+        .route("/api/sends/{id}", put(sends::update_send))
+        .route("/api/sends/{id}", delete(sends::delete_send))
+        .route(
+            "/api/sends/{id}/remove-password",
+            put(sends::remove_password),
+        )
         // For on-demand sync checks
         .route("/api/accounts/revision-date", get(accounts::revision_date))
         .route("/api/accounts/password-hint", post(accounts::password_hint))

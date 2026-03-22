@@ -5,6 +5,7 @@
 //! retention period.
 
 use crate::handlers::attachments;
+use crate::handlers::sends;
 use chrono::{Duration, Utc};
 use std::collections::HashSet;
 use worker::{query, D1Database, Env};
@@ -160,6 +161,10 @@ pub async fn purge_deleted_ciphers(env: &Env) -> Result<u32, worker::Error> {
     }
 
     Ok(count)
+}
+
+pub async fn purge_expired_sends(env: &Env) -> Result<u32, worker::Error> {
+    sends::purge_expired_sends(env).await
 }
 
 /// Helper struct for affected user query result

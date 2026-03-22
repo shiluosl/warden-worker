@@ -7,8 +7,8 @@ use crate::{
     db,
     error::AppError,
     handlers::{
-        attachments, ciphers, ciphers_default_row_query, domains, sync_response_prealloc_bytes,
-        two_factor_enabled,
+        attachments, ciphers, ciphers_default_row_query, domains, sends,
+        sync_response_prealloc_bytes, two_factor_enabled,
     },
     models::{
         folder::{Folder, FolderResponse},
@@ -97,6 +97,14 @@ pub async fn get_sync_data(
         "masterPasswordUnlock": master_password_unlock
     }))
     .map_err(|_| AppError::Internal)?;
+    let sends_db = sends::list_user_sends(&db, &user_id).await?;
+    let sends_json = serde_json::to_string(
+        &sends_db
+            .into_iter()
+            .map(|send| send.to_json())
+            .collect::<Vec<_>>(),
+    )
+    .map_err(|_| AppError::Internal)?;
 
     const DEFAULT_SYNC_RESPONSE_PREALLOC_BYTES: usize = 1024 * 1024;
 
@@ -151,7 +159,9 @@ pub async fn get_sync_data(
         response.push_str(",\"object\":\"domains\"}");
     }
 
-    response.push_str(",\"sends\":[],\"userDecryption\":");
+    response.push_str(",\"sends\":");
+    response.push_str(&sends_json);
+    response.push_str(",\"userDecryption\":");
     response.push_str(&user_decryption_json);
     response.push_str(",\"object\":\"sync\"}");
 

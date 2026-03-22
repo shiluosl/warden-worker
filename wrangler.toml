@@ -2,7 +2,7 @@ name = "warden-worker"
 main = "src/entry.js"
 compatibility_date = "2025-09-19"
 keep_vars = true
-workers_dev = false
+workers_dev = true
 preview_urls = false
 
 [durable_objects]
@@ -100,14 +100,15 @@ migrations_dir = "migrations"
 
 # KV namespace for file attachments (optional, no credit card required)
 # KV has a 25MB limit per file, but doesn't require credit card binding.
-# If R2 is not configured, KV will be used for attachments.
-[[kv_namespaces]]
-binding = "ATTACHMENTS_KV"
+# If R2 is not configured, KV can be enabled by CI/CD when a namespace id is provided.
+# [[kv_namespaces]]
+# binding = "ATTACHMENTS_KV"
+# id = "your-kv-namespace-id"
 
 [env.dev]
 name = "warden-worker-dev"
 keep_vars = true
-workers_dev = false
+workers_dev = true
 preview_urls = false
 
 [env.dev.vars]
@@ -139,8 +140,9 @@ migrations_dir = "migrations"
 # bucket_name = "warden-attachments-dev"
 
 # KV namespace for file attachments in dev environment (optional, no credit card required)
-[[env.dev.kv_namespaces]]
-binding = "ATTACHMENTS_KV"
+# [[env.dev.kv_namespaces]]
+# binding = "ATTACHMENTS_KV"
+# id = "your-dev-kv-namespace-id"
 
 # logs
 [env.dev.observability]

@@ -90,4 +90,14 @@ pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) 
             log::error!("Scheduled purge failed: {:?}", e);
         }
     }
+
+    log::info!("Scheduled task triggered: purging expired sends");
+    match handlers::purge::purge_expired_sends(&env).await {
+        Ok(count) => {
+            log::info!("Expired send purge completed: {} send(s) removed", count);
+        }
+        Err(e) => {
+            log::error!("Expired send purge failed: {:?}", e);
+        }
+    }
 }
