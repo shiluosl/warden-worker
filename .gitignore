@@ -2,6 +2,11 @@ target
 node_modules
 .wrangler
 .env
+.env.*
+deploy-vars.local.env
+cf-secrets.local.json
+wrangler.local.toml
+nul
 # Frontend files (downloaded during deployment/development)
 public/web-vault/
 
