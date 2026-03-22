@@ -1,4 +1,4 @@
-use axum::{extract::State, Form, Json};
+use axum::{extract::State, Extension, Form, Json};
 use chrono::{Duration, Utc};
 use constant_time_eq::constant_time_eq;
 use jwt_compact::AlgorithmExt;
@@ -9,6 +9,7 @@ use std::sync::Arc;
 use worker::{query, Env};
 
 use crate::{
+    BaseUrl,
     auth::{jwt_time_options, Claims},
     crypto::{ct_eq, generate_salt, hash_password_for_storage, validate_totp},
     db,
@@ -20,6 +21,49 @@ use crate::{
     models::twofactor::{RememberTokenData, TwoFactor, TwoFactorType},
     models::user::User,
 };
+
+#[worker::send]
+pub async fn openid_configuration(
+    Extension(BaseUrl(domain)): Extension<BaseUrl>,
+) -> Json<Value> {
+    let identity = format!("{domain}/identity");
+
+    Json(serde_json::json!({
+        "issuer": identity,
+        "authorization_endpoint": format!("{domain}/identity/connect/authorize"),
+        "token_endpoint": format!("{domain}/identity/connect/token"),
+        "userinfo_endpoint": format!("{domain}/identity/connect/userinfo"),
+        "jwks_uri": format!("{domain}/identity/.well-known/jwks.json"),
+        "response_types_supported": ["code", "token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["HS256"],
+        "scopes_supported": ["api", "offline_access"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "claims_supported": ["sub", "email", "name", "sstamp", "premium", "email_verified", "amr"]
+    }))
+}
+
+#[worker::send]
+pub async fn oauth_authorization_server(
+    Extension(BaseUrl(domain)): Extension<BaseUrl>,
+) -> Json<Value> {
+    let identity = format!("{domain}/identity");
+
+    Json(serde_json::json!({
+        "issuer": identity,
+        "authorization_endpoint": format!("{domain}/identity/connect/authorize"),
+        "token_endpoint": format!("{domain}/identity/connect/token"),
+        "jwks_uri": format!("{domain}/identity/.well-known/jwks.json"),
+        "response_types_supported": ["code", "token"],
+        "grant_types_supported": ["password", "refresh_token"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"]
+    }))
+}
+
+#[worker::send]
+pub async fn jwks() -> Json<Value> {
+    Json(serde_json::json!({ "keys": [] }))
+}
 
 /// Deserialize an Option<i32> that may have trailing/leading whitespace.
 /// This handles Android clients that send "0 " instead of "0".

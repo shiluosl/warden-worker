@@ -40,7 +40,7 @@ directory = "./public/web-vault"
 not_found_handling = "404-page"
 html_handling = "auto-trailing-slash"
 # Only invoke Worker for API and Identity routes, serve static files directly for other routes
-run_worker_first = ["/api/*", "/identity/*"]
+run_worker_first = ["/api/*", "/identity/*", "/.well-known/*"]
 
 [vars]
 # Server-side password hashing PBKDF2 iterations (stored per-user).

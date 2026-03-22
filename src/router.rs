@@ -21,6 +21,23 @@ pub fn api_router(env: Env) -> Router {
             "/identity/accounts/register/finish",
             post(accounts::register),
         )
+        .route(
+            "/identity/.well-known/openid-configuration",
+            get(identity::openid_configuration),
+        )
+        .route(
+            "/.well-known/openid-configuration",
+            get(identity::openid_configuration),
+        )
+        .route(
+            "/identity/.well-known/oauth-authorization-server",
+            get(identity::oauth_authorization_server),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(identity::oauth_authorization_server),
+        )
+        .route("/identity/.well-known/jwks.json", get(identity::jwks))
         .route("/identity/connect/token", post(identity::token))
         .route(
             "/identity/accounts/register/send-verification-email",
